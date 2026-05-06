@@ -9,7 +9,6 @@
       "lambda_memory_size": 1024,
       "lambda_timeout": 30,
       "environment_variables": {
-        "FRED_API_KEY": "SET_VIA_LAMBDA_CONSOLE_NOT_HERE",
         "DYNAMODB_TABLE": "recession-tracker",
         "S3_BUCKET": "recession-tracker-plots-mt0925"
       }
