@@ -1,0 +1,18 @@
+{
+  "version": "2.0",
+  "app_name": "recession-tracker-api",
+  "stages": {
+    "dev": {
+      "api_gateway_stage": "api",
+      "autogen_policy": false,
+      "iam_policy_file": "policy-dev.json",
+      "lambda_memory_size": 1024,
+      "lambda_timeout": 30,
+      "environment_variables": {
+        "FRED_API_KEY": "cbb7468cdbf3e3fbe833981f41c2c1bd",
+        "DYNAMODB_TABLE": "recession-tracker",
+        "S3_BUCKET": "recession-tracker-plots-mt0925"
+      }
+    }
+  }
+}
