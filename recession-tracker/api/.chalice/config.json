@@ -8,6 +8,9 @@
       "iam_policy_file": "policy-dev.json",
       "lambda_memory_size": 1024,
       "lambda_timeout": 30,
+      "layers": [
+        "arn:aws:lambda:us-east-1:117370071725:layer:matplotlib-py312:1"
+      ],
       "environment_variables": {
         "DYNAMODB_TABLE": "recession-tracker",
         "S3_BUCKET": "recession-tracker-plots-mt0925"
