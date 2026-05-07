@@ -18,30 +18,6 @@ Each rule that contributes to the score is documented and traceable to a specifi
 
 The ingestion side runs entirely serverless on AWS (EventBridge -> Lambda -> DynamoDB), and the integration API runs as a Chalice app on API Gateway + Lambda. The whole thing sits inside the AWS free tier and runs without manual intervention.
 
----
-
-## How this project maps to the assignment
-
-`Instructions_DP3.md` lays out the deliverables for DS5220 Data Project 3. Here's how each requirement is met:
-
-| Requirement | Implementation |
-|---|---|
-| **Meaningful, time-changing data source** | Seven FRED series — daily yield curve and VIX, monthly UNRATE / CPI / sentiment / fed funds / recession-probability |
-| **EventBridge → Lambda → DynamoDB pipeline** | `ingest/lambda_function.py` triggered by `rate(1 day)`, writes to `recession-tracker` DynamoDB table |
-| **Persistent timestamped store** | DynamoDB row per day, primary key `date` (YYYY-MM-DD), unix `timestamp` attribute |
-| **Idempotent ingest** | Same-day `PutItem` overwrites the existing row, no duplicates on retries |
-| **Logging copious + try/except everywhere** | Python `logging` module; every FRED call, DynamoDB write, matplotlib render, and S3 upload is wrapped |
-| **Chalice app named per spec** | `recession-tracker-api`, deployed to `dev` stage |
-| **Zone apex contract** | `GET /` returns `{"about": "...", "resources": [...]}` exactly as the bot expects |
-| **At least 3 resources, all returning `{response: ...}`** | 5 resources: `current`, `trend`, `plot`, `indicators`, `momentum` |
-| **A current / point-in-time resource** | `GET /current` |
-| **A trend / summary resource** | `GET /trend` (30-day average, direction, range) |
-| **A plot resource returning a public S3 URL** | `GET /plot` uploads PNG to `s3://recession-tracker-plots-mt0925/latest.png` with `ACL='public-read'` |
-| **Decimals cast to float before JSON** | All `_normalize()` paths in `api/app.py` |
-| **Discord-bot-registered API** | Registered as `recession-risk` in `#dp3`; `/project recession-risk` lists the 5 resources |
-| **Stretch goals** | VIX as 7th indicator with intraday-meaningful daily updates; `/momentum` derived endpoint with velocity metrics; `/indicators` traffic-light dashboard; CPI YoY computation; severity-tiered plot bands |
-
----
 
 ## Part 1 — Ingestion Pipeline
 
@@ -262,11 +238,8 @@ If I had more time and budget, this is where I would take the project next:
 
 - **Interactive D3.js dashboard.** Replace the static matplotlib PNG with a single page web app that pulls from the API live. Hover tooltips on each point, a draggable date range slider, toggles to show or hide individual indicators, and drill in on a flag to see its full history. Hosted as a static site on the same S3 bucket so the whole thing stays serverless
 - **Real intraday data.** Pull `^VIX`, `^GSPC`, and live treasury yields every minute during market hours via Yahoo Finance or Polygon.io on a separate `rate(1 minute)` EventBridge schedule. That replaces one VIX print per day with hundreds, and lets the chart show real intraday motion during a market sell off
-- **Anomaly detection and alerting.** A `/alerts` resource that surfaces samples outside N standard deviations of the trailing 90 days. Bolt on an SNS or Slack push when the composite score crosses a tier boundary (Low to Moderate, Moderate to Elevated, etc.) so a non technical user can find out about a regime change without polling
 - **Forecasting layer.** A `/forecast` resource that fits ARIMA or Prophet on the trailing 12 months of risk score and returns a 7 day ahead expected value with a confidence interval. Stretches the project from rule based scoring into actual time series ML
 - **Multi region resilience.** Replicate the DynamoDB table to a second region with global tables, and deploy the API behind a Route 53 latency based routing record. Keeps the dashboard live during regional AWS outages
-- **Custom domain and HTTPS cert.** Map the API to something like `recession.matorres.dev` via API Gateway custom domain names plus an ACM certificate, instead of the auto generated execute-api URL
-- **Cost and observability dashboard.** Track AWS spend per Lambda invocation, per DynamoDB read or write, and per S3 request via CloudWatch Logs Insights. Even at free tier scale this is a useful exercise in production observability
 - **Authentication for any future write paths.** The API is fully public read right now, which is fine for this assignment. If it grew into a real product I would gate any admin or write endpoints behind Cognito or an API key configured in API Gateway
 
 ---
