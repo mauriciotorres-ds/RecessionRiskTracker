@@ -43,6 +43,7 @@ SERIES = {
     "umcsent": "UMCSENT",
     "fedfunds": "FEDFUNDS",
     "recprob": "RECPROB",
+    "vix": "VIXCLS",
 }
 
 
@@ -74,6 +75,14 @@ def compute_score(values, unrate_hist):
     if values.get("recprob") is not None and values["recprob"] > 25:
         score += 10
         flags["recprob_elevated"] = True
+    vix = values.get("vix")
+    if vix is not None:
+        if vix > 35:
+            score += 10
+            flags["vix_high_stress"] = True
+        elif vix > 25:
+            score += 5
+            flags["vix_elevated"] = True
     return min(score, 100), flags
 
 
@@ -152,6 +161,7 @@ def main():
             "umcsent": to_dec(values.get("umcsent")),
             "fedfunds": to_dec(values.get("fedfunds")),
             "recprob": to_dec(values.get("recprob")),
+            "vix": to_dec(values.get("vix")),
             "risk_score": score,
             "flags": flags,
         }

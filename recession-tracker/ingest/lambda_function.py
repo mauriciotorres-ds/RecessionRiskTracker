@@ -39,6 +39,7 @@ SERIES = {
     "umcsent": "UMCSENT",       # U Michigan Consumer Sentiment (monthly)
     "fedfunds": "FEDFUNDS",     # Federal funds effective rate (monthly)
     "recprob": "RECPROB",       # NY Fed recession probability (monthly)
+    "vix": "VIXCLS",            # CBOE Volatility Index — "fear gauge" (daily)
 }
 
 
@@ -133,6 +134,16 @@ def compute_risk_score(values, unrate_history):
         score += 10
         flags["recprob_elevated"] = True
 
+    # VIX > 25 = mild market stress, > 35 = significant stress
+    vix = values.get("vix")
+    if vix is not None:
+        if vix > 35:
+            score += 10
+            flags["vix_high_stress"] = True
+        elif vix > 25:
+            score += 5
+            flags["vix_elevated"] = True
+
     score = min(score, 100)
     logger.info("Computed risk score=%d, flags=%s", score, flags)
     return score, flags
@@ -207,6 +218,7 @@ def lambda_handler(event, context):
         "umcsent": _to_decimal(values.get("umcsent")),
         "fedfunds": _to_decimal(values.get("fedfunds")),
         "recprob": _to_decimal(values.get("recprob")),
+        "vix": _to_decimal(values.get("vix")),
         "risk_score": score,
         "flags": flags,
     }

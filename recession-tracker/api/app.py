@@ -170,7 +170,7 @@ def index():
             "Tracks key Federal Reserve macro indicators daily and computes a "
             "composite recession risk score (0-100) for non-technical stakeholders."
         ),
-        "resources": ["current", "trend", "plot", "indicators"],
+        "resources": ["current", "trend", "plot", "indicators", "momentum"],
     }
 
 
@@ -199,6 +199,10 @@ def current():
         reasons.append("Fed funds restrictive")
     if flags.get("recprob_elevated"):
         reasons.append("NY Fed recession prob elevated")
+    if flags.get("vix_elevated"):
+        reasons.append("VIX elevated")
+    if flags.get("vix_high_stress"):
+        reasons.append("VIX in high stress")
 
     reason_str = (", ".join(reasons).capitalize() + ".") if reasons else "No major flags."
     msg = f"Recession risk is {score}/100 ({label}) as of {rec.get('date')}. {reason_str}"
@@ -242,10 +246,11 @@ def plot():
         dates = [datetime.strptime(r["date"], "%Y-%m-%d") for r in rows]
         scores = [r.get("risk_score") for r in rows]
         spreads = [r.get("t10y2y") for r in rows]
+        vix_vals = [r.get("vix") for r in rows]
 
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(11, 7), sharex=True)
+        fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(11, 9), sharex=True)
 
-        # ---- Top: risk score line, no per-point markers (too dense for 365d) ----
+        # ---- Top: risk score line ----
         ax1.plot(dates, scores, color="#2c3e50", linewidth=1.5, zorder=2)
         ax1.fill_between(dates, scores, 0, color="#3498db", alpha=0.12, zorder=1)
         ax1.set_ylabel("Risk Score (0-100)")
@@ -257,16 +262,28 @@ def plot():
         ax1.axhspan(75, 100, color="#e74c3c", alpha=0.07)
         ax1.grid(True, linestyle=":", alpha=0.5)
 
-        # ---- Bottom: T10Y2Y spread with 0 line ----
+        # ---- Middle: T10Y2Y spread with 0 inversion line ----
         ax2.plot(dates, spreads, color="#2c3e50", linewidth=1.5)
-        ax2.axhline(y=0, color="red", linestyle="--", linewidth=1)
+        ax2.axhline(y=0, color="red", linestyle="--", linewidth=1, label="Inversion threshold")
         ax2.set_ylabel("10y-2y Spread (%)")
-        ax2.set_xlabel("Date")
         ax2.set_title("Treasury Yield Curve (T10Y2Y) — 12 months")
         ax2.grid(True, linestyle=":", alpha=0.5)
+        ax2.legend(loc="upper right", fontsize=8)
 
-        ax2.xaxis.set_major_locator(mdates.AutoDateLocator())
-        ax2.xaxis.set_major_formatter(mdates.DateFormatter("%b %d"))
+        # ---- Bottom: VIX (CBOE Volatility Index — daily market stress signal) ----
+        # VIX is the only series besides T10Y2Y that genuinely changes intraday-to-daily
+        # rather than monthly, so it gives the chart real fine-grained motion.
+        ax3.plot(dates, vix_vals, color="#8e44ad", linewidth=1.5)
+        ax3.axhline(y=25, color="orange", linestyle="--", linewidth=1, label="Elevated (25)")
+        ax3.axhline(y=35, color="red", linestyle="--", linewidth=1, label="High stress (35)")
+        ax3.set_ylabel("VIX")
+        ax3.set_xlabel("Date")
+        ax3.set_title("Market Volatility (VIX) — 12 months")
+        ax3.grid(True, linestyle=":", alpha=0.5)
+        ax3.legend(loc="upper right", fontsize=8)
+
+        ax3.xaxis.set_major_locator(mdates.AutoDateLocator())
+        ax3.xaxis.set_major_formatter(mdates.DateFormatter("%b %d"))
         fig.autofmt_xdate()
         fig.tight_layout()
 
@@ -351,7 +368,99 @@ def indicators():
             red_if=lambda v: v > 25,
             label_green="Low", label_yellow="Moderate", label_red="Elevated",
         ),
+        "vix": cls(
+            rec.get("vix"),
+            green_if=lambda v: v < 18,
+            red_if=lambda v: v > 25,
+            label_green="Calm", label_yellow="Choppy", label_red="Stressed",
+        ),
     }
 
     logger.info("GET /indicators response built for %d series", len(out))
     return {"response": out}
+
+
+@app.route("/momentum", cors=True)
+def momentum():
+    """Derived velocity / momentum metrics.
+
+    Computed fresh on every API call from whatever's in DynamoDB right now.
+    Updates as fast as you can call the endpoint — useful for a dashboard
+    poll loop. The underlying daily ingest doesn't need to fire for these
+    numbers to change: time-since-last-flag and timestamps update by the
+    second.
+    """
+    logger.info("GET /momentum called")
+    rows = _scan_recent(days=400)
+    rows = [r for r in rows if r.get("risk_score") is not None]
+    if not rows:
+        return {"response": "Not enough history to compute momentum."}
+
+    rows.sort(key=lambda r: r["date"])
+    today = rows[-1]
+    today_date = today["date"]
+    today_score = today["risk_score"]
+
+    def _score_n_ago(n_days):
+        """Score from n calendar days ago (or the closest earlier row)."""
+        if len(rows) <= n_days:
+            return None
+        return rows[-1 - n_days]["risk_score"]
+
+    s_1d = _score_n_ago(1)
+    s_7d = _score_n_ago(7)
+    s_30d = _score_n_ago(30)
+    s_90d = _score_n_ago(90)
+
+    def delta(prev):
+        return None if prev is None else round(float(today_score) - float(prev), 1)
+
+    # Days since the score last changed (i.e. how long we've been at the
+    # current value). Walk backwards from today.
+    days_at_current = 0
+    for r in reversed(rows):
+        if r["risk_score"] == today_score:
+            days_at_current += 1
+        else:
+            break
+
+    # Trajectory label — looks at 7d delta direction.
+    d7 = delta(s_7d)
+    if d7 is None:
+        trajectory = "Insufficient history"
+    elif d7 > 5:
+        trajectory = "Deteriorating fast"
+    elif d7 > 0:
+        trajectory = "Slightly worsening"
+    elif d7 < -5:
+        trajectory = "Improving fast"
+    elif d7 < 0:
+        trajectory = "Slightly improving"
+    else:
+        trajectory = "Stable"
+
+    # VIX change vs yesterday — daily-changing market stress signal
+    vix_today = today.get("vix")
+    vix_yest = rows[-2].get("vix") if len(rows) >= 2 else None
+    vix_change_1d = None
+    if vix_today is not None and vix_yest is not None:
+        vix_change_1d = round(float(vix_today) - float(vix_yest), 2)
+
+    active_flags = list((today.get("flags") or {}).keys())
+
+    response = {
+        "as_of": today_date,
+        "current_score": today_score,
+        "change_1d": delta(s_1d),
+        "change_7d": delta(s_7d),
+        "change_30d": delta(s_30d),
+        "change_90d": delta(s_90d),
+        "days_at_current_score": days_at_current,
+        "trajectory": trajectory,
+        "vix_today": float(vix_today) if vix_today is not None else None,
+        "vix_change_1d": vix_change_1d,
+        "active_flags": active_flags,
+        "computed_at_utc": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+    }
+    logger.info("GET /momentum response: %s", response)
+    return {"response": response}
