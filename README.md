@@ -256,6 +256,21 @@ Beyond the three required resources, this project added:
 
 ---
 
+## Future Stretch Goals
+
+If I had more time and budget, this is where I would take the project next:
+
+- **Interactive D3.js dashboard.** Replace the static matplotlib PNG with a single page web app that pulls from the API live. Hover tooltips on each point, a draggable date range slider, toggles to show or hide individual indicators, and drill in on a flag to see its full history. Hosted as a static site on the same S3 bucket so the whole thing stays serverless
+- **Real intraday data.** Pull `^VIX`, `^GSPC`, and live treasury yields every minute during market hours via Yahoo Finance or Polygon.io on a separate `rate(1 minute)` EventBridge schedule. That replaces one VIX print per day with hundreds, and lets the chart show real intraday motion during a market sell off
+- **Anomaly detection and alerting.** A `/alerts` resource that surfaces samples outside N standard deviations of the trailing 90 days. Bolt on an SNS or Slack push when the composite score crosses a tier boundary (Low to Moderate, Moderate to Elevated, etc.) so a non technical user can find out about a regime change without polling
+- **Forecasting layer.** A `/forecast` resource that fits ARIMA or Prophet on the trailing 12 months of risk score and returns a 7 day ahead expected value with a confidence interval. Stretches the project from rule based scoring into actual time series ML
+- **Multi region resilience.** Replicate the DynamoDB table to a second region with global tables, and deploy the API behind a Route 53 latency based routing record. Keeps the dashboard live during regional AWS outages
+- **Custom domain and HTTPS cert.** Map the API to something like `recession.matorres.dev` via API Gateway custom domain names plus an ACM certificate, instead of the auto generated execute-api URL
+- **Cost and observability dashboard.** Track AWS spend per Lambda invocation, per DynamoDB read or write, and per S3 request via CloudWatch Logs Insights. Even at free tier scale this is a useful exercise in production observability
+- **Authentication for any future write paths.** The API is fully public read right now, which is fine for this assignment. If it grew into a real product I would gate any admin or write endpoints behind Cognito or an API key configured in API Gateway
+
+---
+
 ## Discord registration
 
 Registered with the course bot in `#dp3`:
