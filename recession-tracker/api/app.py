@@ -234,7 +234,7 @@ def trend():
 @app.route("/plot", cors=True)
 def plot():
     logger.info("GET /plot called")
-    rows = _scan_recent(days=90)
+    rows = _scan_recent(days=365)
     if not rows:
         return {"response": "No data available to plot."}
 
@@ -243,15 +243,13 @@ def plot():
         scores = [r.get("risk_score") for r in rows]
         spreads = [r.get("t10y2y") for r in rows]
 
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 7), sharex=True)
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(11, 7), sharex=True)
 
-        # ---- Top: risk score, points colored by severity tier ----
-        ax1.plot(dates, scores, color="#444", linewidth=1.2, zorder=1)
-        for d, s in zip(dates, scores):
-            ax1.scatter([d], [s], color=_severity_color(s), s=36,
-                        edgecolor="white", linewidth=0.5, zorder=2)
+        # ---- Top: risk score line, no per-point markers (too dense for 365d) ----
+        ax1.plot(dates, scores, color="#2c3e50", linewidth=1.5, zorder=2)
+        ax1.fill_between(dates, scores, 0, color="#3498db", alpha=0.12, zorder=1)
         ax1.set_ylabel("Risk Score (0-100)")
-        ax1.set_title("Recession Risk Score — 90 days")
+        ax1.set_title("Recession Risk Score — 12 months")
         ax1.set_ylim(0, 100)
         ax1.axhspan(0, 25, color="#2ecc71", alpha=0.07)
         ax1.axhspan(25, 50, color="#f1c40f", alpha=0.07)
@@ -264,7 +262,7 @@ def plot():
         ax2.axhline(y=0, color="red", linestyle="--", linewidth=1)
         ax2.set_ylabel("10y-2y Spread (%)")
         ax2.set_xlabel("Date")
-        ax2.set_title("Treasury Yield Curve (T10Y2Y)")
+        ax2.set_title("Treasury Yield Curve (T10Y2Y) — 12 months")
         ax2.grid(True, linestyle=":", alpha=0.5)
 
         ax2.xaxis.set_major_locator(mdates.AutoDateLocator())
